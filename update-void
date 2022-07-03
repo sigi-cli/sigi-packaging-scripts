@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -euxo pipefail
+
+fail() {
+  >&2 echo "$1"
+  exit 1
+}
+
+[[ -v 1 ]] || fail "No version specified. Halting"
+
+VERSION="$1"
+
+LOCAL_REPO="${LOCAL_REPO:-/workplace/hiljusti/void-packages}"
+
+cd "$LOCAL_REPO" || fail "Couldn't change to $LOCAL_REPO"
+
+git checkout master
+git pull upstream master && git push
+
+BRANCH="update/sigi-$VERSION"
+
+git branch -D "$BRANCH" || true
+git checkout -b "$BRANCH"
+
+PKG=./srcpkgs/sigi/template
+
+sed -i -E "s/version=.+/version=$VERSION/" "$PKG"
+
+wget "https://crates.io/api/v1/crates/sigi/$VERSION/download"
+SHASUM="$(sha256sum download | cut -d' ' -f1)"
+rm download
+
+sed -i -E "s/checksum=.+/checksum=$SHASUM/" "$PKG"
+
+xlint "$PKG"
+
+./xbps-src pkg -Q sigi
+
+git add "$PKG"
+
+COMMIT_MSG="sigi: update to $VERSION"
+
+git commit -m "$COMMIT_MSG"
+
+git push -u origin "$BRANCH"
+
+gh pr create \
+  --draft \
+  --title "$COMMIT_MSG" \
+  --body "I tested the changes in this PR: **YES**" \
+  --repo void-linux/void-packages
+
+git checkout master
+git branch -D "update/sigi-$VERSION" || true

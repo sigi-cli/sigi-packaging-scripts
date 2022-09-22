@@ -1,0 +1,56 @@
+#!/bin/bash
+
+set -euxo pipefail
+
+fail() {
+  >&2 echo "$1"
+  exit 1
+}
+
+[[ -v 1 ]] || fail "No version specified. Halting"
+
+VERSION="$1"
+
+LOCAL_REPO="${LOCAL_REPO:-/workplace/hiljusti/nixpkgs}"
+
+cd "$LOCAL_REPO" || fail "Couldn't change to $LOCAL_REPO"
+
+git checkout master
+git pull upstream master && git push
+
+BRANCH="update/sigi-$VERSION"
+
+git branch -D "$BRANCH" || true
+git checkout -b "$BRANCH"
+
+PKG=./pkgs/applications/misc/sigi/default.nix
+
+OLDVERSION="$(grep -E 'version' "$PKG" | head -n 1 | sed 's/";//' | sed -E 's/.+"//')"
+
+sed -i -E "s/version = \".+/version = \"$VERSION\";/" "$PKG"
+
+SHASUM="$(not nix-env -iA sigi -f . 2>&1 | tee | grep got | sed -E 's/.+sha/sha/')"
+
+sed -i -E "s/sha256 = .+/sha256 = \"${SHASUM//\//\\\/}\";/" "$PKG"
+
+CARGO_SHASUM="$(not nix-env -iA sigi -f . 2>&1 | tee | grep got | sed -E 's/.+sha/sha/')"
+
+sed -i -E "s/cargoSha256 = .+/cargoSha256 = \"${CARGO_SHASUM//\//\\\/}\";/" "$PKG"
+
+nix-env -iA sigi -f .
+
+git add "$PKG"
+
+COMMIT_MSG="sigi: $OLDVERSION -> $VERSION"
+
+git commit -m "$COMMIT_MSG"
+
+git push -u origin "$BRANCH"
+
+gh pr create \
+  --draft \
+  --title "$COMMIT_MSG" \
+  --repo NixOS/nixpkgs
+
+git checkout master
+git branch -D "update/sigi-$VERSION" || true

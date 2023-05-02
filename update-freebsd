@@ -1,0 +1,34 @@
+#!/bin/bash
+
+set -eux
+
+script="$(basename "$0")"
+newver="$1"
+patchfile="sigi-to-$newver.patch"
+
+if [[ $(hostname) != freebsd.local ]]; then
+    scp "$0" freebox:~/"$script"
+    ssh -qt freebox "bash '$script' '$newver'" \
+        && scp freebox:~/"$patchfile" .
+
+    exit 0
+fi
+
+cd /workplace/hiljusti/ports/deskutils/sigi/
+git pull --rebase
+
+sed -i.bak -E "s|DISTVERSION=.+|DISTVERSION=\t$newver|" Makefile
+sed -i.bak -E "s|PORTREVISION=.+||" Makefile
+rm *.bak
+
+rm Makefile.crates
+make makesum
+make cargo-crates > Makefile.crates
+make makesum
+
+git add -A
+git commit -m "deskutils/sigi: Update to $newver"
+git format-patch origin/main
+
+mv *.patch ~/"$patchfile"
+

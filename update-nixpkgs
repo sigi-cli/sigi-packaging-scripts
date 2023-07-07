@@ -54,3 +54,4 @@ gh pr create \
 
 git checkout master
 git branch -D "update/sigi-$VERSION" || true
+

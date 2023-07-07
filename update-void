@@ -43,7 +43,7 @@ COMMIT_MSG="sigi: update to $VERSION"
 
 git commit -m "$COMMIT_MSG"
 
-git push -u origin "$BRANCH"
+git push -u origin "$BRANCH" --force
 
 gh pr create \
   --draft \

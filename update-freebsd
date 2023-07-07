@@ -6,6 +6,10 @@ script="$(basename "$0")"
 newver="$1"
 patchfile="sigi-to-$newver.patch"
 
+# HOST forking! If we're not in the freebsd host:
+# 1. Copy this script there
+# 2. Execute it
+# 3. Copy back the patchfile it creates
 if [[ $(hostname) != freebsd.local ]]; then
     scp "$0" freebox:~/"$script"
     ssh -qt freebox "bash '$script' '$newver'" \
@@ -15,15 +19,25 @@ if [[ $(hostname) != freebsd.local ]]; then
 fi
 
 cd /workplace/hiljusti/ports/deskutils/sigi/
-git pull --rebase
+
+git checkout main
+git clean -f
+git pull
+
+git branch -D "update/sigi-$newver" || true
+git checkout -b "update/sigi-$newver"
 
 sed -i.bak -E "s|DISTVERSION=.+|DISTVERSION=\t$newver|" Makefile
 sed -i.bak -E "s|PORTREVISION=.+||" Makefile
 rm *.bak
 
 rm Makefile.crates
+
+echo '=== Making! ==='
+
+make clean
 make makesum
-make cargo-crates > Makefile.crates
+make cargo-crates | grep CARGO_CRATES -A 1000 > Makefile.crates
 make makesum
 
 git add -A
